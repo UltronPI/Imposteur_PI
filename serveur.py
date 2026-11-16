@@ -3,21 +3,29 @@ from collections import Counter
 import paho.mqtt.client as mqtt
 
 BROKER = os.getenv("BROKER", "localhost")
-IDS = sys.argv[1:]
-if len(IDS) < 2:
-    sys.exit("usage : python serveur.py <id1> <id2> [<id3> ...]")
+# soit un nombre de joueurs (les capteurs s'annoncent avec le nom de leur agent),
+# soit la liste des identifiants
+ARGS = sys.argv[1:]
+if len(ARGS) == 1 and ARGS[0].isdigit():
+    NB, IDS = int(ARGS[0]), []
+else:
+    NB, IDS = len(ARGS), ARGS
+if NB < 2:
+    sys.exit("usage : python serveur.py <nb_joueurs>  ou  python serveur.py <id1> <id2> [...]")
 
-espion = random.choice(IDS)
 votes = {}   # votant -> suspect
 
 def on_connect(c, u, flags, rc, props=None):
     c.subscribe("iot/votes/+")
-    # retain : le rôle est livré même si le capteur se connecte après
-    for i in IDS:
-        c.publish(f"iot/role/{i}", "espion" if i == espion else "normal", qos=1, retain=True)
-    print(f"rôles envoyés à {', '.join(IDS)} (espion : {espion})")
+    c.subscribe("iot/presence/+")
 
 def on_message(c, u, msg):
+    if msg.topic.startswith("iot/presence/"):
+        sid = msg.topic.split("/")[2]
+        if len(IDS) < NB and sid not in IDS:
+            IDS.append(sid)
+            print(f"{sid} rejoint la partie ({len(IDS)}/{NB})")
+        return
     votant = msg.topic.split("/")[2]
     if votant in IDS:
         votes[votant] = msg.payload.decode().strip()
@@ -27,6 +35,17 @@ client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id="serveur")
 client.on_connect, client.on_message = on_connect, on_message
 client.connect(BROKER, 1883)
 client.loop_start()
+
+if len(IDS) < NB:
+    print(f"en attente de {NB} capteurs...")
+while len(IDS) < NB:
+    time.sleep(0.5)
+
+espion = random.choice(IDS)
+# retain : le rôle est livré même si le capteur se connecte après
+for i in IDS:
+    client.publish(f"iot/role/{i}", "espion" if i == espion else "normal", qos=1, retain=True)
+print(f"rôles envoyés à {', '.join(IDS)} (espion : {espion})")
 
 print("en attente des votes...")
 while len(votes) < len(IDS):

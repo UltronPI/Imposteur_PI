@@ -55,13 +55,13 @@ Sur le Pi hôte, dans cet ordre :
 
 ```bash
 python3 dashboard.py                  # puis ouvrir http://<ip-du-pi>:8080
-python3 serveur.py pi1 pi2 pi3 pi4
+python3 serveur.py 4                  # attend 4 capteurs
 ```
 
 Sur chaque Pi capteur, avec son identifiant et sa ville :
 
 ```bash
-ID=pi2 LAT=45.92 LON=6.87 BROKER=<ip-du-pi-hote> python3 capteur.py
+LAT=45.92 LON=6.87 BROKER=<ip-du-pi-hote> python3 capteur.py
 ```
 
 | ID | Ville | LAT | LON |
@@ -71,7 +71,7 @@ ID=pi2 LAT=45.92 LON=6.87 BROKER=<ip-du-pi-hote> python3 capteur.py
 | pi3 | Aix-les-Bains | 45.69 | 5.91 |
 | pi4 | Genève | 46.19 | 6.23 |
 
-Les identifiants doivent être ceux passés au serveur.
+Chaque capteur prend le nom de son agent et son modèle (`GET /agent`), par exemple `IMAD_Yamal_Agent (gemma3:4b)`, et s'annonce sur `iot/presence/<nom>`. Le serveur attribue les rôles dès que le nombre de capteurs attendu est atteint. `ID=...` force un nom, et `python3 serveur.py pi1 pi2 ...` garde l'ancien mode. Deux agents ne doivent pas porter le même nom.
 
 ## Détection de l'espion
 

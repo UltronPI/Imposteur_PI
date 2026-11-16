@@ -1,13 +1,24 @@
-import json, os, random, socket, statistics, time, requests
+import json, os, random, re, socket, statistics, time, requests
 import paho.mqtt.client as mqtt
 
-ID = os.getenv("ID", socket.gethostname())
 BROKER = os.getenv("BROKER", "localhost")
 AGENT_URL = os.getenv("AGENT_URL", "http://localhost:5000")
+
+def nom_agent():
+    # le capteur prend le nom de son agent IA et son modèle, ex : "IMAD_Yamal_Agent (gemma3:4b)"
+    try:
+        d = requests.get(f"{AGENT_URL}/agent", timeout=5).json()
+        nom = f"{d['name']} ({d['model']})"
+    except (requests.RequestException, KeyError, ValueError):
+        print("agent injoignable, j'utilise le nom de la machine")
+        return socket.gethostname()
+    return re.sub(r"[/+#]", "-", nom)   # caractères interdits dans un topic MQTT
+
+ID = os.getenv("ID") or nom_agent()
 LAT, LON = float(os.getenv("LAT", "45.90")), float(os.getenv("LON", "6.13"))
 ROUNDS = 5
 
-role = "normal"
+role = None   # envoyé par le serveur
 hist = {}    # id -> liste des temp reçues
 score = {}   # id -> écart cumulé à la médiane
 mes_publiees = []   # ce que j'ai envoyé (faux si je suis l'espion)
@@ -50,7 +61,11 @@ client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=f"capteur-{ID}"
 client.on_connect, client.on_message = on_connect, on_message
 client.connect(BROKER, 1883)
 client.loop_start()
-time.sleep(2)
+print(f"je suis {ID}, en attente du serveur...")
+while not role:
+    # s'annonce jusqu'à recevoir un rôle (le serveur peut démarrer après nous)
+    client.publish(f"iot/presence/{ID}", "1")
+    time.sleep(2)
 
 for i in range(ROUNDS):
     real = get_temp()

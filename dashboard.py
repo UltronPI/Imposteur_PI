@@ -113,7 +113,7 @@ main{display:grid;grid-template-columns:minmax(320px,1fr) minmax(320px,1fr);gap:
 @media(max-width:800px){main{grid-template-columns:1fr}}
 section{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:12px}
 h2{margin:0 0 8px;font-size:12px;color:var(--dim);letter-spacing:.15em;font-weight:normal}
-svg{width:100%;height:auto;display:block}
+svg{width:100%;height:auto;display:block;overflow:visible}
 #sweep{transform-origin:200px 200px;animation:tour 4s linear infinite}
 @keyframes tour{to{transform:rotate(360deg)}}
 .pulse{animation:pulse 1s ease-in-out infinite}
@@ -121,7 +121,7 @@ svg{width:100%;height:auto;display:block}
 #journal{height:210px;overflow:auto;font-size:12px}
 #journal div{padding:2px 0;border-bottom:1px dotted #143225}
 #journal span{color:var(--dim);margin-right:8px}
-.bar{display:grid;grid-template-columns:90px 1fr 50px;gap:8px;align-items:center;margin:5px 0}
+.bar{display:grid;grid-template-columns:minmax(90px,auto) 1fr 50px;gap:8px;align-items:center;margin:5px 0}
 .bar i{display:block;height:10px;border-radius:2px}
 .bar div{background:#10261d;border-radius:2px}
 .bulle{margin:6px 0;padding:8px 10px;border-left:3px solid;background:#10261d;border-radius:0 4px 4px 0}

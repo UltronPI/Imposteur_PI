@@ -89,10 +89,10 @@ def state():
              "soupcons": soupcons(), "journal": journal, "attendus": len(roles),
              "fini": fini}
         if fini:
-            espion = next((i for i, r in roles.items() if r == "espion"), None)
+            ultron = next((i for i, r in roles.items() if r == "ultron"), None)
             designe, nb = Counter(votes[i] for i in roles).most_common(1)[0]
-            d.update(espion=espion, designe=designe,
-                     gagne=designe == espion and nb > len(roles) / 2)
+            d.update(ultron=ultron, designe=designe,
+                     gagne=designe == ultron and nb > len(roles) / 2)
         return jsonify(d)
 
 @app.get("/")
@@ -132,7 +132,7 @@ svg{width:100%;height:auto;display:block;overflow:visible}
 #verdict{display:none;margin:14px;padding:16px;text-align:center;font-size:20px;letter-spacing:.15em;border:2px solid;border-radius:6px}
 .col{display:grid;gap:14px;align-content:start}
 </style></head><body>
-<header><h1>SALLE DE CONTRÔLE — CHASSE À L'ESPION</h1><div id="phase">connexion…</div></header>
+<header><h1>SALLE DE CONTRÔLE — CHASSE À ULTRON</h1><div id="phase">connexion…</div></header>
 <div id="verdict"></div>
 <main>
  <section><h2>RADAR DES CAPTEURS</h2>
@@ -181,12 +181,12 @@ function rendu(s){
     F.append(el("line",{x1:x1+(x2-x1)*k,y1:y1+(y2-y1)*k,x2:x2-(x2-x1)*k,y2:y2-(y2-y1)*k,stroke:"#ff4d5e","stroke-width":dbt?2:1,"stroke-dasharray":"2 5",opacity:.8}));
   }
   s.ids.forEach((id,i)=>{
-    const [x,y]=P[id],t=s.temps[id]||[],r=(s.soupcons[id]||0)/max,esp=s.fini&&id===s.espion;
+    const [x,y]=P[id],t=s.temps[id]||[],r=(s.soupcons[id]||0)/max,esp=s.fini&&id===s.ultron;
     const c=esp?"#ff4d5e":s.fini?"#3dffa0":teinte(tours>1?r:0);
     if(esp)N.append(el("circle",{cx:x,cy:y,r:34,fill:"none",stroke:"#ff4d5e","stroke-width":3,class:"pulse"}));
     N.append(el("circle",{cx:x,cy:y,r:24,fill:"#06110d",stroke:c,"stroke-width":3}));
     N.append(el("text",{x,y:y+5,"text-anchor":"middle",fill:c,"font-size":13},t.length?t[t.length-1].toFixed(1)+"°":"—"));
-    N.append(el("text",{x,y:y+(y<200?-32:44),"text-anchor":"middle",fill:COUL[i%6],"font-size":13},esp?id+" — ESPION":id));
+    N.append(el("text",{x,y:y+(y<200?-32:44),"text-anchor":"middle",fill:COUL[i%6],"font-size":13},esp?id+" — ULTRON":id));
   });
 
   // courbes
@@ -208,7 +208,7 @@ function rendu(s){
   if(!liste.length){const v=document.createElement("div");v.className="vide";v.textContent="en attente du premier tour\u2026";U.append(v)}
   liste.forEach(d=>{const b=document.createElement("div"),h=document.createElement("b"),c=COUL[s.ids.indexOf(d.id)%6];
     b.className=dbt?"bulle acc":"bulle";b.style.borderColor=c;h.style.color=c;
-    h.textContent=dbt?`${d.id} accuse ${d.suspect}`+(s.fini&&d.id===s.espion?"  (c'\u00e9tait l'espion, il mentait)":""):d.id;
+    h.textContent=dbt?`${d.id} accuse ${d.suspect}`+(s.fini&&d.id===s.ultron?"  (c'\u00e9tait Ultron, il mentait)":""):d.id;
     b.append(h,d.texte);U.append(b)});
 
   // barres de soupçon
@@ -225,7 +225,7 @@ function rendu(s){
   // verdict
   const V=$("verdict");
   if(s.fini){V.style.display="block";V.style.color=s.gagne?"#3dffa0":"#ff4d5e";
-    V.textContent=s.gagne?`ESPION DÉMASQUÉ : ${s.espion} — LES CAPTEURS GAGNENT`:`L'ESPION ${s.espion} A GAGNÉ (désigné : ${s.designe})`}
+    V.textContent=s.gagne?`ULTRON DÉMASQUÉ : ${s.ultron} — LES CAPTEURS GAGNENT`:`ULTRON ${s.ultron} A GAGNÉ (désigné : ${s.designe})`}
   else V.style.display="none";
 }
 async function tick(){try{rendu(await (await fetch("/state")).json())}catch(e){$("phase").textContent="serveur injoignable"}}

@@ -198,17 +198,17 @@ def list_conversations():
 
 
 DETECT_PROMPT = (
-    "Tu es un capteur de température dans un jeu de détection d'espion. "
+    "Tu es un capteur de température dans un jeu de détection d'Ultron. "
     "Chaque capteur mesure la température d'une ville voisine, donc les valeurs honnêtes sont proches. "
-    "Un seul capteur est un espion qui envoie des valeurs fausses, environ 10 à 20 % différentes des autres. "
+    "Un seul capteur est Ultron, un imposteur qui envoie des valeurs fausses, environ 10 à 20 % différentes des autres. "
     "Analyse les mesures et désigne le capteur le plus suspect. Tu ne peux pas te désigner toi-même."
 )
 
 
 MENTIR_PROMPT = (
-    "Tu es un capteur de température dans un jeu de détection d'espion, et l'espion c'est toi. "
+    "Tu es un capteur de température dans un jeu de détection d'Ultron, et Ultron c'est toi. "
     "Personne ne doit le savoir. Tu dois faire accuser le capteur {cible} à ta place. "
-    "Invente un argument crédible contre lui à partir des mesures, et ne dis jamais que tu es l'espion."
+    "Invente un argument crédible contre lui à partir des mesures, et ne dis jamais que tu es Ultron."
 )
 STYLE_PROMPT = (
     " Tu es le capteur {me}. Dans 'raison', écris l'accusation que tu lances devant les autres : "
@@ -230,16 +230,16 @@ def detect():
         f"- capteur {sid}{' (moi)' if sid == me else ''} : {', '.join(map(str, vals))}"
         for sid, vals in mesures.items())
     system = DETECT_PROMPT + STYLE_PROMPT.format(me=me)
-    # l'espion ment : il accuse la cible choisie par le capteur
+    # Ultron ment : il accuse la cible choisie par le capteur
     cible = str(data.get("cible", ""))
-    if data.get("role") == "espion" and cible in candidats:
+    if data.get("role") == "ultron" and cible in candidats:
         candidats = [cible]
         system = MENTIR_PROMPT.format(cible=cible) + STYLE_PROMPT.format(me=me)
     payload = {
         "model": MODEL,
         "messages": [
             {"role": "system", "content": system},
-            {"role": "user", "content": f"Mesures en °C sur les derniers tours :\n{lignes}\nQui est l'espion ?"},
+            {"role": "user", "content": f"Mesures en °C sur les derniers tours :\n{lignes}\nQui est Ultron ?"},
         ],
         "stream": False,
         "think": False,

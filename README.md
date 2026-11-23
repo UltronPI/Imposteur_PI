@@ -1,13 +1,13 @@
-# Chasse à l'espion — jeu distribué MQTT
+# Chasse à Ultron — jeu distribué MQTT
 
-TP R5.A.05 (IUT d'Annecy). Plusieurs Raspberry Pi jouent le rôle de capteurs de température et s'échangent des mesures via MQTT. L'un d'eux est un espion qui envoie de fausses valeurs : les autres doivent le démasquer par un vote.
+TP R5.A.05 (IUT d'Annecy). Plusieurs Raspberry Pi jouent le rôle de capteurs de température et s'échangent des mesures via MQTT. L'un d'eux est Ultron, un imposteur qui envoie de fausses valeurs : les autres doivent le démasquer par un vote.
 
 ## Règles
 
-- Le serveur tire un espion au hasard et envoie son rôle à chaque Pi.
-- Toutes les 5 secondes, chaque Pi publie la température de sa ville (API Open-Meteo). L'espion publie une valeur faussée de 10 à 20 %.
+- Le serveur tire Ultron au hasard et envoie son rôle à chaque Pi.
+- Toutes les 5 secondes, chaque Pi publie la température de sa ville (API Open-Meteo). Ultron publie une valeur faussée de 10 à 20 %.
 - Après 5 échanges, chaque Pi vote pour le capteur qu'il soupçonne.
-- Si la majorité désigne l'espion, les capteurs gagnent. Sinon, l'espion gagne.
+- Si la majorité désigne Ultron, les capteurs gagnent. Sinon, Ultron gagne.
 
 ## Fichiers
 
@@ -15,8 +15,8 @@ TP R5.A.05 (IUT d'Annecy). Plusieurs Raspberry Pi jouent le rôle de capteurs de
 |---|---|---|
 | `serveur.py` | hôte | Attribue les rôles, compte les votes, annonce le résultat |
 | `dashboard.py` | hôte | Tableau de bord web : radar des capteurs, courbes, votes, verdict |
-| `capteur.py` | tous | Publie les températures, détecte l'espion, vote |
-| `agent.py` | tous | Agent LLM (Ollama) qui donne son avis sur l'espion |
+| `capteur.py` | tous | Publie les températures, détecte Ultron, vote |
+| `agent.py` | tous | Agent LLM (Ollama) qui donne son avis sur Ultron |
 
 ## Réseau
 
@@ -108,13 +108,13 @@ Il faut couper le serveur et tous les capteurs (Ctrl+C), puis relancer le serveu
 | Topic | Contenu |
 |---|---|
 | `iot/presence/<id>` | Un capteur s'annonce au serveur |
-| `iot/role/<id>` | Rôle envoyé par le serveur (`normal` ou `espion`) |
+| `iot/role/<id>` | Rôle envoyé par le serveur (`normal` ou `ultron`) |
 | `iot/capteurs/<id>/temperature` | Température publiée par un capteur |
 | `iot/soupcon/<id>` | Soupçon d'un capteur à chaque tour (JSON `suspect`, `texte`) |
 | `iot/debat/<id>` | Accusation finale donnée par l'agent (JSON `suspect`, `texte`) |
 | `iot/votes/<id>` | Vote d'un capteur |
 
-## Détection de l'espion
+## Détection d'Ultron
 
 À chaque tour, chaque capteur compare les valeurs reçues à la médiane et cumule l'écart de chaque voisin. Le capteur qui a le plus grand écart cumulé est le suspect.
 

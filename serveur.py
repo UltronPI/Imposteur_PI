@@ -42,11 +42,11 @@ if len(IDS) < NB:
 while len(IDS) < NB:
     time.sleep(0.5)
 
-espion = random.choice(IDS)
+ultron = random.choice(IDS)
 # pas de retain : les capteurs sont connectés puisqu'ils viennent de s'annoncer
 for i in IDS:
-    client.publish(f"iot/role/{i}", "espion" if i == espion else "normal", qos=1)
-print(f"rôles envoyés à {', '.join(IDS)} (espion : {espion})")
+    client.publish(f"iot/role/{i}", "ultron" if i == ultron else "normal", qos=1)
+print(f"rôles envoyés à {', '.join(IDS)} (Ultron : {ultron})")
 
 # les agents peuvent mettre jusqu'à 5 min à répondre
 VOTE_TIMEOUT = float(os.getenv("VOTE_TIMEOUT", "420"))
@@ -63,11 +63,11 @@ if not votes:
 compte = Counter(votes.values())
 designe, nb = compte.most_common(1)[0]
 print("décompte :", dict(compte))
-print(f"désigné : {designe} ({nb}/{len(IDS)} votes) | vrai espion : {espion}")
-if designe == espion and nb > len(IDS) / 2:
+print(f"désigné : {designe} ({nb}/{len(IDS)} votes) | vrai Ultron : {ultron}")
+if designe == ultron and nb > len(IDS) / 2:
     print("les capteurs gagnent !")
 else:
-    print("l'espion a gagné !")
+    print("Ultron a gagné !")
 
 time.sleep(1)
 client.loop_stop()

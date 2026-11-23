@@ -33,7 +33,7 @@ ROUNDS = 5
 role = None   # envoyé par le serveur
 hist = {}    # id -> liste des temp reçues
 score = {}   # id -> écart cumulé à la médiane
-mes_publiees = []   # ce que j'ai envoyé (faux si je suis l'espion)
+mes_publiees = []   # ce que j'ai envoyé (faux si je suis Ultron)
 
 def get_temp():
     try:
@@ -65,7 +65,7 @@ def on_message(c, u, msg):
         print(f"{sid} envoie {float(msg.payload)}")
 
 def ask_agent(cible=None):
-    # mes_publiees : l'espion montre ses fausses valeurs, pas les vraies
+    # mes_publiees : Ultron montre ses fausses valeurs, pas les vraies
     mesures = {**hist, ID: mes_publiees}
     r = requests.post(f"{AGENT_URL}/detect", timeout=300,
         json={"me": ID, "mesures": mesures, "role": role, "cible": cible})
@@ -91,7 +91,7 @@ while not role:
 for i in range(ROUNDS):
     real = get_temp()
     t = real
-    if role == "espion":
+    if role == "ultron":
         t = round(real * (1 + random.choice([-1, 1]) * random.uniform(0.10, 0.20)), 1)
     mes_publiees.append(t)
     client.publish(f"iot/capteurs/{ID}/temperature", t)
@@ -105,8 +105,8 @@ for i in range(ROUNDS):
             score[sid] = score.get(sid, 0) + abs(v - med)
         print("scores :", {k: round(v, 2) for k, v in score.items()})
         pire = max(score, key=score.get)
-        if role == "espion":
-            # l'espion détourne les soupçons vers le capteur honnête le plus éloigné
+        if role == "ultron":
+            # Ultron détourne les soupçons vers le capteur honnête le plus éloigné
             dire("soupcon", pire, f"Tour {i+1} : {pire} m'inquiète, il a envoyé {last[pire]} °C.")
         elif score[pire] < 0.5:
             dire("soupcon", None, f"Tour {i+1} : rien de suspect, tout le monde est proche de {med:.1f} °C.")
@@ -118,7 +118,7 @@ if score:
     algo = max(score, key=score.get)
     print("l'agent réfléchit...")
     try:
-        suspect, texte = ask_agent(cible=algo if role == "espion" else None)
+        suspect, texte = ask_agent(cible=algo if role == "ultron" else None)
         print(f"algo -> {algo} | agent -> {suspect}")
     except (requests.RequestException, KeyError, ValueError) as e:
         print("agent KO, je garde l'algo :", e)

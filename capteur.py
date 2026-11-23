@@ -4,14 +4,26 @@ import paho.mqtt.client as mqtt
 BROKER = os.getenv("BROKER", "localhost")
 AGENT_URL = os.getenv("AGENT_URL", "http://localhost:5000")
 
+def mon_ip():
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        s.connect(("8.8.8.8" if BROKER == "localhost" else BROKER, 1883))   # aucun paquet envoyé
+        return s.getsockname()[0]
+    except OSError:
+        return str(random.randint(100, 999))
+    finally:
+        s.close()
+
 def nom_agent():
     # le capteur prend le nom de son agent IA et son modèle, ex : "IMAD_Yamal_Agent (gemma3:4b)"
     try:
         d = requests.get(f"{AGENT_URL}/agent", timeout=5).json()
         nom = f"{d['name']} ({d['model']})"
     except (requests.RequestException, KeyError, ValueError):
-        print("agent injoignable, j'utilise le nom de la machine")
-        return socket.gethostname()
+        # tous les Pi s'appellent "raspberrypi" : on ajoute la fin de l'IP pour les distinguer
+        nom = f"{socket.gethostname()}-{mon_ip().split('.')[-1]}"
+        print(f"agent injoignable sur {AGENT_URL}, j'utilise le nom {nom}")
+        return nom
     return re.sub(r"[/+#]", "-", nom)   # caractères interdits dans un topic MQTT
 
 ID = os.getenv("ID") or nom_agent()
@@ -24,6 +36,13 @@ score = {}   # id -> écart cumulé à la médiane
 mes_publiees = []   # ce que j'ai envoyé (faux si je suis l'espion)
 
 def get_temp():
+    try:
+        return _get_temp()
+    except (requests.RequestException, KeyError, ValueError) as e:
+        print("météo injoignable, je réutilise ma dernière valeur :", e)
+        return mes_publiees[-1] if mes_publiees else 10.0
+
+def _get_temp():
     r = requests.get("https://api.open-meteo.com/v1/forecast", timeout=5,
         params={"latitude": LAT, "longitude": LON, "current": "temperature_2m"})
     return r.json()["current"]["temperature_2m"]
@@ -35,6 +54,8 @@ def on_connect(c, u, flags, rc, props=None):
 def on_message(c, u, msg):
     global role
     if msg.topic.startswith("iot/role/"):
+        if msg.retain:   # rôle d'une ancienne partie resté sur le broker
+            return
         role = msg.payload.decode().strip()
         print("rôle :", role)
         return
@@ -107,6 +128,10 @@ if score:
     time.sleep(3)   # laisse le temps de lire l'accusation avant le vote
     client.publish(f"iot/votes/{ID}", suspect, qos=1)
     print("vote :", suspect)
+else:
+    # personne d'autre n'a publié : on vote quand même pour ne pas bloquer le serveur
+    print("aucune mesure reçue des autres capteurs (même BROKER ?), vote blanc")
+    client.publish(f"iot/votes/{ID}", "blanc", qos=1)
 
 time.sleep(1)
 client.loop_stop()

@@ -1,89 +1,135 @@
 # Chasse à l'espion — jeu distribué MQTT
 
-TP R5.A.05 (IUT d'Annecy). Quatre Raspberry Pi jouent le rôle de capteurs de température et s'échangent des mesures via MQTT. L'un d'eux est un espion qui envoie de fausses valeurs : les autres doivent le démasquer par un vote.
+TP R5.A.05 (IUT d'Annecy). Plusieurs Raspberry Pi jouent le rôle de capteurs de température et s'échangent des mesures via MQTT. L'un d'eux est un espion qui envoie de fausses valeurs : les autres doivent le démasquer par un vote.
 
 ## Règles
 
 - Le serveur tire un espion au hasard et envoie son rôle à chaque Pi.
-- Toutes les 5 secondes, chaque Pi publie la température de sa ville (API Open-Meteo). L'espion publie une valeur faussée.
+- Toutes les 5 secondes, chaque Pi publie la température de sa ville (API Open-Meteo). L'espion publie une valeur faussée de 10 à 20 %.
 - Après 5 échanges, chaque Pi vote pour le capteur qu'il soupçonne.
 - Si la majorité désigne l'espion, les capteurs gagnent. Sinon, l'espion gagne.
 
 ## Fichiers
 
-| Fichier | Rôle |
-|---|---|
-| `serveur.py` | Attribue les rôles, compte les votes, annonce le résultat |
-| `capteur.py` | Publie les températures, détecte l'espion, vote |
-| `dashboard.py` | Tableau de bord web : radar des capteurs, courbes, votes, verdict |
-| `agent.py` | Extension : agent LLM (Ollama) qui donne son avis sur l'espion |
+| Fichier | Où | Rôle |
+|---|---|---|
+| `serveur.py` | hôte | Attribue les rôles, compte les votes, annonce le résultat |
+| `dashboard.py` | hôte | Tableau de bord web : radar des capteurs, courbes, votes, verdict |
+| `capteur.py` | tous | Publie les températures, détecte l'espion, vote |
+| `agent.py` | tous | Agent LLM (Ollama) qui donne son avis sur l'espion |
 
-## Topics MQTT
+## Réseau
 
-| Topic | Contenu |
-|---|---|
-| `iot/role/<id>` | Rôle envoyé par le serveur (`normal` ou `espion`) |
-| `iot/capteurs/<id>/temperature` | Température publiée par un capteur |
-| `iot/votes/<id>` | Vote d'un capteur |
-| `iot/raison/<id>` | Explication donnée par l'agent LLM (pour le tableau de bord) |
+L'hôte est toujours le Pi **`10.109.150.44`**. Il fait tourner le broker Mosquitto, le serveur et le dashboard.
 
-## Installation
+Dashboard : **http://10.109.150.44:8080**
 
-Sur chaque Pi :
+## Installation (une seule fois)
+
+### Sur tous les Pi
 
 ```bash
-pip install paho-mqtt requests
+git clone https://github.com/imademo-png/projet_imposteur.git
+cd projet_imposteur
+pip install paho-mqtt requests flask
+ollama pull gemma3:4b
 ```
 
-Sur le Pi qui héberge le jeu, il faut en plus le broker Mosquitto et Flask :
+Chaque joueur doit donner **un nom unique** à son agent dans `agent.py` :
+
+```python
+AGENT_NAME = "Mon_Agent"
+```
+
+Le capteur prend ce nom pour jouer. Si deux agents portent le même nom, le serveur ne voit qu'un seul joueur et le broker déconnecte l'un des deux.
+
+### En plus sur l'hôte
 
 ```bash
 sudo apt install mosquitto
-pip install flask
 ```
 
-Le broker doit accepter les connexions du réseau (`/etc/mosquitto/conf.d/tp.conf`) :
+Le broker doit accepter les connexions du réseau. Il faut créer `/etc/mosquitto/conf.d/tp.conf` :
 
 ```
 listener 1883
 allow_anonymous true
 ```
 
+puis lancer `sudo systemctl restart mosquitto`.
+
 ## Lancer une partie
 
-Sur le Pi hôte, dans cet ordre :
+Avant chaque partie, tout le monde récupère la dernière version :
 
 ```bash
-python3 dashboard.py                  # puis ouvrir http://<ip-du-pi>:8080
-python3 serveur.py 4                  # attend 4 capteurs
+git pull
 ```
 
-Sur chaque Pi capteur, avec son identifiant et sa ville :
+### Sur l'hôte (10.109.150.44)
+
+Il faut un terminal par commande :
 
 ```bash
-LAT=45.92 LON=6.87 BROKER=<ip-du-pi-hote> python3 capteur.py
+python3 dashboard.py                      # 1. tableau de bord sur :8080
+python3 agent.py                          # 2. attendre "Running on http://..."
+LAT=45.90 LON=6.13 python3 capteur.py     # 3. l'hôte joue aussi (broker en local)
+python3 serveur.py <nb_joueurs>           # 4. ex : 2 si vous êtes deux, hôte compris
 ```
 
-| ID | Ville | LAT | LON |
-|---|---|---|---|
-| pi1 | Annecy | 45.90 | 6.13 |
-| pi2 | Chamonix | 45.92 | 6.87 |
-| pi3 | Aix-les-Bains | 45.69 | 5.91 |
-| pi4 | Genève | 46.19 | 6.23 |
+### Sur les autres Pi
 
-Chaque capteur prend le nom de son agent et son modèle (`GET /agent`), par exemple `IMAD_Yamal_Agent (gemma3:4b)`, et s'annonce sur `iot/presence/<nom>`. Le serveur attribue les rôles dès que le nombre de capteurs attendu est atteint. `ID=...` force un nom, et `python3 serveur.py pi1 pi2 ...` garde l'ancien mode. Deux agents ne doivent pas porter le même nom.
+Il faut un terminal par commande :
+
+```bash
+python3 agent.py                          # 1. attendre "Running on http://..."
+BROKER=10.109.150.44 LAT=45.92 LON=6.87 python3 capteur.py   # 2. avec sa ville
+```
+
+> ⚠️ Il faut lancer le capteur **après** que l'agent affiche « Running on ». Sinon le capteur ne trouve pas l'agent et s'appelle `raspberrypi-<fin de l'IP>`, puis il joue sans IA.
+
+Les capteurs s'annoncent toutes les 2 secondes. Ils peuvent donc démarrer avant ou après le serveur. Le serveur envoie les rôles dès que `<nb_joueurs>` capteurs se sont annoncés.
+
+### Villes
+
+| Ville | LAT | LON |
+|---|---|---|
+| Annecy | 45.90 | 6.13 |
+| Chamonix | 45.92 | 6.87 |
+| Aix-les-Bains | 45.69 | 5.91 |
+| Genève | 46.19 | 6.23 |
+
+### Relancer une partie
+
+Il faut couper le serveur et tous les capteurs (Ctrl+C), puis relancer le serveur et les capteurs. Les agents et le dashboard peuvent continuer à tourner. Si le serveur reste lancé, il garde en mémoire les joueurs déjà inscrits.
+
+## Topics MQTT
+
+| Topic | Contenu |
+|---|---|
+| `iot/presence/<id>` | Un capteur s'annonce au serveur |
+| `iot/role/<id>` | Rôle envoyé par le serveur (`normal` ou `espion`) |
+| `iot/capteurs/<id>/temperature` | Température publiée par un capteur |
+| `iot/soupcon/<id>` | Soupçon d'un capteur à chaque tour (JSON `suspect`, `texte`) |
+| `iot/debat/<id>` | Accusation finale donnée par l'agent (JSON `suspect`, `texte`) |
+| `iot/votes/<id>` | Vote d'un capteur |
 
 ## Détection de l'espion
 
-Chaque capteur compare, à chaque tour, les valeurs reçues à la médiane et cumule l'écart de chaque voisin. Le capteur avec le plus grand écart cumulé est le suspect.
+À chaque tour, chaque capteur compare les valeurs reçues à la médiane et cumule l'écart de chaque voisin. Le capteur qui a le plus grand écart cumulé est le suspect.
 
-## Extension : agent LLM
+À la fin, le capteur envoie toutes les mesures à son agent (`POST /detect`) et vote en suivant son avis. Si l'agent ne répond pas, le capteur garde le résultat de l'algorithme.
 
-Chaque Pi exécute Ollama (modèle `gemma3:4b`) et `agent.py`, qui expose une route `POST /detect`. Le capteur lui envoie toutes les mesures et vote en suivant son avis. Si l'agent ne répond pas, le capteur garde le résultat de l'algorithme.
+## Options
 
-```bash
-ollama pull gemma3:4b
-python3 agent.py                      # écoute sur le port 5000
-```
+| Variable | Script | Défaut | Rôle |
+|---|---|---|---|
+| `BROKER` | capteur, serveur, dashboard | `localhost` | IP du broker (`10.109.150.44` sur les autres Pi) |
+| `LAT`, `LON` | capteur | Annecy | Ville du capteur |
+| `ID` | capteur | nom de l'agent | Force le nom du capteur |
+| `AGENT_URL` | capteur | `http://localhost:5000` | Adresse de l'agent |
+| `MODEL` | agent | `gemma3:4b` | Modèle Ollama |
+| `PORT` | agent, dashboard | `5000`, `8080` | Port d'écoute |
+| `VOTE_TIMEOUT` | serveur | `420` | Attente maximale des votes (s) |
 
-Variables d'environnement du capteur : `ID`, `BROKER`, `AGENT_URL`, `LAT`, `LON`.
+`python3 serveur.py pi1 pi2 ...` attend ces capteurs précis au lieu d'un nombre de joueurs.

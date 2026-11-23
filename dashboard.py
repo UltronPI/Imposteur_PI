@@ -37,11 +37,12 @@ def on_message(c, u, msg):
         return
     with lock:
         if p[1] == "role":
-            # nouvelle rafale = nouvelle partie (on oublie aussi les anciens messages retenus)
-            if not msg.retain and time.time() - dernier_role > 5:
+            if msg.retain:   # rôle d'une ancienne partie resté sur le broker
+                return
+            # nouvelle rafale = nouvelle partie
+            if time.time() - dernier_role > 5:
                 reset()
-            if not msg.retain:
-                dernier_role = time.time()
+            dernier_role = time.time()
             roles[p[2]] = txt
         elif p[1] == "capteurs" and p[-1] == "temperature":
             try:

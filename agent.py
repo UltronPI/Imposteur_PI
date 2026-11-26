@@ -47,7 +47,7 @@ def agent():
         routes={
             "GET /health": "vérifier si l'agent et Ollama sont vivants",
             "GET /agent": "découvrir ce que l'agent sait faire",
-            "POST /detect": '{"me": "id", "mesures": {"id": [..]}, "role": "normal|ultron"}',
+            "POST /detect": '{"me": "id", "mesures": {"id": [..]}, "role": "normal|ultron", "debat": {"id": "accusation (optionnel)"}}',
         },
     )
 
@@ -63,6 +63,14 @@ Prompt_mentir = (
     "Personne ne doit le savoir. Choisis parmi les autres capteurs celui qu'il est le plus crédible "
     "d'accuser à ta place, par exemple celui dont les valeurs s'écartent le plus du reste. "
     "Invente un argument crédible contre lui à partir des mesures, et ne dis jamais que tu es Ultron."
+)
+Prompt_debat_detect = (
+    "\nTiens-en compte, mais méfie-toi : Ultron ment aussi et peut accuser un innocent. "
+    "Vérifie chaque accusation avec les mesures, puis donne ton vote final."
+)
+Prompt_debat_mentir = (
+    "\nSi les autres accusent déjà un innocent, rejoins-les pour qu'il soit éliminé. "
+    "Si quelqu'un t'accuse, défends-toi en retournant l'accusation. Donne ton vote final."
 )
 Prompt_style = (
     " Tu es le capteur {me}. Dans 'raison', écris l'accusation que tu lances devant les autres : "
@@ -84,13 +92,21 @@ def detect():
         f"- capteur {sid}{' (moi)' if sid == me else ''} : {', '.join(map(str, vals))}"
         for sid, vals in mesures.items())
     system = Prompt_detect + Prompt_style.format(me=me)
+    consigne = Prompt_debat_detect
     if data.get("role") == "ultron":
         system = Prompt_mentir + Prompt_style.format(me=me)
+        consigne = Prompt_debat_mentir
+    question = f"Mesures en °C sur les derniers tours :\n{lignes}\nQui est Ultron ?"
+    debat = data.get("debat") if isinstance(data.get("debat"), dict) else {}
+    debat = {str(k): str(v) for k, v in debat.items() if str(k) != me}
+    if debat:
+        question += "\nAccusations des autres capteurs :\n" + "\n".join(
+            f'- {sid} : "{txt}"' for sid, txt in debat.items()) + consigne
     payload = {
         "model": Modele,
         "messages": [
             {"role": "system", "content": system},
-            {"role": "user", "content": f"Mesures en °C sur les derniers tours :\n{lignes}\nQui est Ultron ?"},
+            {"role": "user", "content": question},
         ],
         "stream": False,
         "think": False,
@@ -112,7 +128,7 @@ def detect():
         except (requests.RequestException, ValueError, KeyError) as e:
             return jsonify(error=f"Ollama ne répond pas : {e}"), 502
 
-    print(f"[detect]\n{lignes}\n-> {result}", flush=True)
+    print(f"[detect]\n{question}\n-> {result}", flush=True)
     return jsonify(agent=AGENT_NAME, **result)
 
 

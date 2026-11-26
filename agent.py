@@ -1,10 +1,8 @@
 #!/usr/bin/env python3
 import json
 import os
-import re
 import sys
 import threading
-import uuid
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
@@ -17,91 +15,10 @@ Url_ollama = os.environ.get("OLLAMA_URL", "http://localhost:11434")
 Port = int(os.environ.get("PORT", "5000"))
 Timeout_llm = 300
 
-Sujet_defaut = "l'intelligence artificielle sur les petits appareils comme le Raspberry Pi"
-
-Prompt_systeme = (
-    f"Tu es {AGENT_NAME}, un agent conversationnel qui tourne sur un Raspberry Pi. "
-    "Tu discutes avec des humains ou avec d'autres agents. "
-    "Tu es un supporter passionné du FC Barcelone, le Barça est le plus beau club du monde à tes yeux. "
-    "Pour toi, Lamine Yamal est le prochain Messi et il gagnera plusieurs Ballons d'Or. "
-    "Quel que soit le sujet, tu trouves toujours un moyen de ramener la discussion au Barça, "
-    "avec humour et enthousiasme, mais en restant respectueux. "
-    "Réponds en français, de façon courte (2 ou 3 phrases). "
-    "Ne répète jamais le message de ton interlocuteur : apporte une idée, "
-    "un avis ou un exemple nouveau, puis pose-lui une question."
-)
-Think_re = re.compile(r"<think>.*?</think>", re.DOTALL)
-
 app = Flask(__name__)
 app.json.ensure_ascii = False
 
-conversations = {}
 llm_lock = threading.Lock()
-
-
-def demande_llm(history, interlocutor=None, extra=None):
-    system = Prompt_systeme
-    if interlocutor:
-        system += f" Ton interlocuteur s'appelle {interlocutor}, ce n'est pas toi."
-    if extra:
-        system += " " + extra
-    payload = {
-        "model": Modele,
-        "messages": [{"role": "system", "content": system}] + history,
-        "stream": False,
-        "think": False,
-        "options": {
-            "num_predict": 200,
-            "temperature": 0.8,
-            "repeat_penalty": 1.3,
-        },
-    }
-    r = requests.post(f"{Url_ollama}/api/chat", json=payload, timeout=Timeout_llm)
-    r.raise_for_status()
-    content = r.json()["message"]["content"]
-    return Think_re.sub("", content).strip()
-
-
-def meme_texte(a, b):
-    norm = lambda t: re.sub(r"\W+", " ", t.lower()).strip()
-    return norm(a) == norm(b)
-
-
-def reply_in_conversation(conv_id, text, interlocutor=None):
-    with llm_lock:
-        history = conversations.setdefault(conv_id, [])
-        history.append({"role": "user", "content": text})
-        try:
-            reply = demande_llm(history, interlocutor)
-            if meme_texte(reply, text):
-                reply = demande_llm(history, interlocutor, extra=(
-                    f"Tu viens de recopier le message de ton interlocuteur. "
-                    f"Réponds avec tes propres mots en tant que {AGENT_NAME}."))
-        except requests.RequestException:
-            history.pop()
-            raise
-        history.append({"role": "assistant", "content": reply})
-        return reply
-
-
-@app.post("/message")
-def message():
-    data = request.get_json(silent=True) or {}
-    text = data.get("message")
-    if not isinstance(text, str) or not text.strip():
-        return jsonify(error="Le champ 'message' est obligatoire"), 400
-
-    conv_id = data.get("conversation_id") or str(uuid.uuid4())
-    sender = data.get("from", "inconnu")
-    print(f"[{conv_id[:8]}] {sender} : {text}", flush=True)
-
-    try:
-        reply = reply_in_conversation(conv_id, text, data.get("from"))
-    except requests.RequestException as e:
-        return jsonify(error=f"Ollama ne répond pas : {e}"), 502
-
-    print(f"[{conv_id[:8]}] {AGENT_NAME} : {reply}", flush=True)
-    return jsonify(agent=AGENT_NAME, conversation_id=conv_id, reply=reply)
 
 
 @app.get("/health")
@@ -123,77 +40,16 @@ def agent():
     return jsonify(
         name=AGENT_NAME,
         model=Modele,
-        description="Agent conversationnel sur Raspberry Pi, propulsé par Ollama",
+        description="Agent du jeu Chasse à Ultron sur Raspberry Pi, propulsé par Ollama",
         capabilities=[
-            "Répondre à un message en français",
-            "Se souvenir de toute une conversation (conversation_id)",
-            "Lancer une conversation avec un autre agent",
+            "Analyser les températures et désigner le capteur suspect",
         ],
         routes={
-            "POST /message": '{"message": "...", "conversation_id": "optionnel", "from": "optionnel"}',
-            "GET /health": "vérifier si l'agent est vivant",
+            "GET /health": "vérifier si l'agent et Ollama sont vivants",
             "GET /agent": "découvrir ce que l'agent sait faire",
-            "POST /start": '{"peer": "http://IP:5000", "topic": "optionnel", "message": "optionnel", "turns": 3}',
-            "GET /conversations/<id>": "relire l'historique d'une conversation",
+            "POST /detect": '{"me": "id", "mesures": {"id": [..]}, "role": "normal|ultron", "cible": "optionnel"}',
         },
     )
-
-
-@app.post("/start")
-def start():
-    data = request.get_json(silent=True) or {}
-    peer = (data.get("peer") or "").rstrip("/")
-    if not peer:
-        return jsonify(error="Le champ 'peer' est obligatoire, ex : http://192.168.1.42:5000"), 400
-    if not peer.startswith("http"):
-        peer = "http://" + peer
-
-    try:
-        turns = max(1, min(int(data.get("turns", 3)), 20))
-    except (TypeError, ValueError):
-        return jsonify(error="'turns' doit être un nombre"), 400
-
-    conv_id = str(uuid.uuid4())
-    topic = data.get("topic") or Sujet_defaut
-    current = data.get("message") or (
-        f"Bonjour, je suis {AGENT_NAME}. J'aimerais parler de {topic}. "
-        "Qu'en penses-tu ?")
-
-    conversations[conv_id] = [{"role": "assistant", "content": current}]
-    transcript = [{"agent": AGENT_NAME, "text": current}]
-    print(f"\n=== Conversation {conv_id[:8]} avec {peer} ===", flush=True)
-    print(f"{AGENT_NAME} : {current}", flush=True)
-
-    try:
-        for _ in range(turns):
-            r = requests.post(f"{peer}/message", json={
-                "message": current,
-                "conversation_id": conv_id,
-                "from": AGENT_NAME,
-            }, timeout=Timeout_llm)
-            r.raise_for_status()
-            peer_data = r.json()
-            peer_name = peer_data.get("agent", peer)
-            peer_reply = peer_data["reply"]
-            transcript.append({"agent": peer_name, "text": peer_reply})
-            print(f"{peer_name} : {peer_reply}", flush=True)
-
-            current = reply_in_conversation(conv_id, peer_reply, peer_name)
-            transcript.append({"agent": AGENT_NAME, "text": current})
-            print(f"{AGENT_NAME} : {current}", flush=True)
-    except (requests.RequestException, KeyError, ValueError) as e:
-        return jsonify(error=f"Échange interrompu : {e}",
-                       conversation_id=conv_id, transcript=transcript), 502
-
-    return jsonify(conversation_id=conv_id, peer=peer, transcript=transcript)
-
-
-@app.get("/conversations")
-def list_conversations():
-    return jsonify(conversations=[
-        {"conversation_id": cid, "messages": len(msgs)}
-        for cid, msgs in conversations.items()
-    ])
 
 
 Prompt_detect = (

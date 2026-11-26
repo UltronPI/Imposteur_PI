@@ -47,7 +47,7 @@ def agent():
         routes={
             "GET /health": "vérifier si l'agent et Ollama sont vivants",
             "GET /agent": "découvrir ce que l'agent sait faire",
-            "POST /detect": '{"me": "id", "mesures": {"id": [..]}, "role": "normal|ultron", "cible": "optionnel"}',
+            "POST /detect": '{"me": "id", "mesures": {"id": [..]}, "role": "normal|ultron"}',
         },
     )
 
@@ -60,7 +60,8 @@ Prompt_detect = (
 )
 Prompt_mentir = (
     "Tu es un capteur de température dans un jeu de détection d'Ultron, et Ultron c'est toi. "
-    "Personne ne doit le savoir. Tu dois faire accuser le capteur {cible} à ta place. "
+    "Personne ne doit le savoir. Choisis parmi les autres capteurs celui qu'il est le plus crédible "
+    "d'accuser à ta place, par exemple celui dont les valeurs s'écartent le plus du reste. "
     "Invente un argument crédible contre lui à partir des mesures, et ne dis jamais que tu es Ultron."
 )
 Prompt_style = (
@@ -83,10 +84,8 @@ def detect():
         f"- capteur {sid}{' (moi)' if sid == me else ''} : {', '.join(map(str, vals))}"
         for sid, vals in mesures.items())
     system = Prompt_detect + Prompt_style.format(me=me)
-    cible = str(data.get("cible", ""))
-    if data.get("role") == "ultron" and cible in candidats:
-        candidats = [cible]
-        system = Prompt_mentir.format(cible=cible) + Prompt_style.format(me=me)
+    if data.get("role") == "ultron":
+        system = Prompt_mentir + Prompt_style.format(me=me)
     payload = {
         "model": Modele,
         "messages": [

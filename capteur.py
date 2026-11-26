@@ -62,10 +62,10 @@ def on_message(c, u, msg):
         hist.setdefault(sid, []).append(float(msg.payload))
         print(f"{sid} envoie {float(msg.payload)}")
 
-def ask_agent(cible=None):
+def ask_agent():
     mesures = {**hist, Id: mes_publiees}
     r = requests.post(f"{Url_agent}/detect", timeout=300,
-        json={"me": Id, "mesures": mesures, "role": role, "cible": cible})
+        json={"me": Id, "mesures": mesures, "role": role})
     r.raise_for_status()
     d = r.json()
     return d["suspect"], d.get("raison", "")
@@ -112,7 +112,7 @@ if score:
     algo = max(score, key=score.get)
     print("l'agent réfléchit...")
     try:
-        suspect, texte = ask_agent(cible=algo if role == "ultron" else None)
+        suspect, texte = ask_agent()
         print(f"algo -> {algo} | agent -> {suspect}")
     except (requests.RequestException, KeyError, ValueError) as e:
         print("agent KO, je garde l'algo :", e)

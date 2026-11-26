@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
+import json
 import os
 import re
 import sys
 import threading
 import uuid
-import json
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
@@ -12,14 +12,14 @@ import requests
 from flask import Flask, jsonify, request
 
 AGENT_NAME = "IMAD_Yamal_Agent"
-MODEL = os.environ.get("MODEL", "gemma3:4b")
-OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434")
-PORT = int(os.environ.get("PORT", "5000"))
-LLM_TIMEOUT = 300
+Modele = os.environ.get("MODEL", "gemma3:4b")
+Url_ollama = os.environ.get("OLLAMA_URL", "http://localhost:11434")
+Port = int(os.environ.get("PORT", "5000"))
+Timeout_llm = 300
 
-DEFAULT_TOPIC = "l'intelligence artificielle sur les petits appareils comme le Raspberry Pi"
+Sujet_defaut = "l'intelligence artificielle sur les petits appareils comme le Raspberry Pi"
 
-SYSTEM_PROMPT = (
+Prompt_systeme = (
     f"Tu es {AGENT_NAME}, un agent conversationnel qui tourne sur un Raspberry Pi. "
     "Tu discutes avec des humains ou avec d'autres agents. "
     "Tu es un supporter passionné du FC Barcelone, le Barça est le plus beau club du monde à tes yeux. "
@@ -30,7 +30,7 @@ SYSTEM_PROMPT = (
     "Ne répète jamais le message de ton interlocuteur : apporte une idée, "
     "un avis ou un exemple nouveau, puis pose-lui une question."
 )
-THINK_RE = re.compile(r"<think>.*?</think>", re.DOTALL)
+Think_re = re.compile(r"<think>.*?</think>", re.DOTALL)
 
 app = Flask(__name__)
 app.json.ensure_ascii = False
@@ -39,14 +39,14 @@ conversations = {}
 llm_lock = threading.Lock()
 
 
-def ask_llm(history, interlocutor=None, extra=None):
-    system = SYSTEM_PROMPT
+def demande_llm(history, interlocutor=None, extra=None):
+    system = Prompt_systeme
     if interlocutor:
         system += f" Ton interlocuteur s'appelle {interlocutor}, ce n'est pas toi."
     if extra:
         system += " " + extra
     payload = {
-        "model": MODEL,
+        "model": Modele,
         "messages": [{"role": "system", "content": system}] + history,
         "stream": False,
         "think": False,
@@ -56,13 +56,13 @@ def ask_llm(history, interlocutor=None, extra=None):
             "repeat_penalty": 1.3,
         },
     }
-    r = requests.post(f"{OLLAMA_URL}/api/chat", json=payload, timeout=LLM_TIMEOUT)
+    r = requests.post(f"{Url_ollama}/api/chat", json=payload, timeout=Timeout_llm)
     r.raise_for_status()
     content = r.json()["message"]["content"]
-    return THINK_RE.sub("", content).strip()
+    return Think_re.sub("", content).strip()
 
 
-def same_text(a, b):
+def meme_texte(a, b):
     norm = lambda t: re.sub(r"\W+", " ", t.lower()).strip()
     return norm(a) == norm(b)
 
@@ -72,9 +72,9 @@ def reply_in_conversation(conv_id, text, interlocutor=None):
         history = conversations.setdefault(conv_id, [])
         history.append({"role": "user", "content": text})
         try:
-            reply = ask_llm(history, interlocutor)
-            if same_text(reply, text):
-                reply = ask_llm(history, interlocutor, extra=(
+            reply = demande_llm(history, interlocutor)
+            if meme_texte(reply, text):
+                reply = demande_llm(history, interlocutor, extra=(
                     f"Tu viens de recopier le message de ton interlocuteur. "
                     f"Réponds avec tes propres mots en tant que {AGENT_NAME}."))
         except requests.RequestException:
@@ -107,7 +107,7 @@ def message():
 @app.get("/health")
 def health():
     try:
-        r = requests.get(f"{OLLAMA_URL}/api/tags", timeout=5)
+        r = requests.get(f"{Url_ollama}/api/tags", timeout=5)
         r.raise_for_status()
         ollama = "ok"
     except requests.RequestException:
@@ -122,7 +122,7 @@ def health():
 def agent():
     return jsonify(
         name=AGENT_NAME,
-        model=MODEL,
+        model=Modele,
         description="Agent conversationnel sur Raspberry Pi, propulsé par Ollama",
         capabilities=[
             "Répondre à un message en français",
@@ -154,7 +154,7 @@ def start():
         return jsonify(error="'turns' doit être un nombre"), 400
 
     conv_id = str(uuid.uuid4())
-    topic = data.get("topic") or DEFAULT_TOPIC
+    topic = data.get("topic") or Sujet_defaut
     current = data.get("message") or (
         f"Bonjour, je suis {AGENT_NAME}. J'aimerais parler de {topic}. "
         "Qu'en penses-tu ?")
@@ -170,7 +170,7 @@ def start():
                 "message": current,
                 "conversation_id": conv_id,
                 "from": AGENT_NAME,
-            }, timeout=LLM_TIMEOUT)
+            }, timeout=Timeout_llm)
             r.raise_for_status()
             peer_data = r.json()
             peer_name = peer_data.get("agent", peer)
@@ -196,21 +196,18 @@ def list_conversations():
     ])
 
 
-
-DETECT_PROMPT = (
+Prompt_detect = (
     "Tu es un capteur de température dans un jeu de détection d'Ultron. "
     "Chaque capteur mesure la température d'une ville voisine, donc les valeurs honnêtes sont proches. "
     "Un seul capteur est Ultron, un imposteur qui envoie des valeurs fausses, environ 10 à 20 % différentes des autres. "
     "Analyse les mesures et désigne le capteur le plus suspect. Tu ne peux pas te désigner toi-même."
 )
-
-
-MENTIR_PROMPT = (
+Prompt_mentir = (
     "Tu es un capteur de température dans un jeu de détection d'Ultron, et Ultron c'est toi. "
     "Personne ne doit le savoir. Tu dois faire accuser le capteur {cible} à ta place. "
     "Invente un argument crédible contre lui à partir des mesures, et ne dis jamais que tu es Ultron."
 )
-STYLE_PROMPT = (
+Prompt_style = (
     " Tu es le capteur {me}. Dans 'raison', écris l'accusation que tu lances devant les autres : "
     "commence par 'J'accuse <suspect>', puis donne en une phrase ses valeurs qui posent problème. "
     "Tu ne peux pas t'accuser toi-même ({me}). En français, 2 phrases maximum."
@@ -229,25 +226,22 @@ def detect():
     lignes = "\n".join(
         f"- capteur {sid}{' (moi)' if sid == me else ''} : {', '.join(map(str, vals))}"
         for sid, vals in mesures.items())
-    system = DETECT_PROMPT + STYLE_PROMPT.format(me=me)
-    # Ultron ment : il accuse la cible choisie par le capteur
+    system = Prompt_detect + Prompt_style.format(me=me)
     cible = str(data.get("cible", ""))
     if data.get("role") == "ultron" and cible in candidats:
         candidats = [cible]
-        system = MENTIR_PROMPT.format(cible=cible) + STYLE_PROMPT.format(me=me)
+        system = Prompt_mentir.format(cible=cible) + Prompt_style.format(me=me)
     payload = {
-        "model": MODEL,
+        "model": Modele,
         "messages": [
             {"role": "system", "content": system},
             {"role": "user", "content": f"Mesures en °C sur les derniers tours :\n{lignes}\nQui est Ultron ?"},
         ],
         "stream": False,
         "think": False,
-        # force une réponse JSON, suspect limité aux ids valides
         "format": {
             "type": "object",
             "properties": {
-                # suspect d'abord : la raison est écrite après le choix, donc cohérente
                 "suspect": {"type": "string", "enum": candidats},
                 "raison": {"type": "string"},
             },
@@ -257,15 +251,16 @@ def detect():
     }
     with llm_lock:
         try:
-            r = requests.post(f"{OLLAMA_URL}/api/chat", json=payload, timeout=LLM_TIMEOUT)
+            r = requests.post(f"{Url_ollama}/api/chat", json=payload, timeout=Timeout_llm)
             r.raise_for_status()
             result = json.loads(r.json()["message"]["content"])
         except (requests.RequestException, ValueError, KeyError) as e:
             return jsonify(error=f"Ollama ne répond pas : {e}"), 502
 
     print(f"[detect]\n{lignes}\n-> {result}", flush=True)
-    return jsonify(agent=AGENT_NAME, **result)    
+    return jsonify(agent=AGENT_NAME, **result)
+
 
 if __name__ == "__main__":
-    print(f"Agent {AGENT_NAME} (modèle {MODEL}) sur le port {PORT}", flush=True)
-    app.run(host="0.0.0.0", port=PORT, threaded=True)
+    print(f"Agent {AGENT_NAME} (modèle {Modele}) sur le port {Port}", flush=True)
+    app.run(host="0.0.0.0", port=Port, threaded=True)

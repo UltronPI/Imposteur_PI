@@ -3,16 +3,16 @@ from collections import Counter
 import paho.mqtt.client as mqtt
 from flask import Flask, jsonify
 
-BROKER = os.getenv("BROKER", "localhost")
-PORT = int(os.getenv("PORT", "8080"))
+Brok = os.getenv("BROKER", "localhost")
+Port = int(os.getenv("PORT", "8080"))
 
 lock = threading.Lock()
-temps = {}     # id -> liste des temp reçues
-votes = {}     # votant -> suspect
-pensees = {}   # id -> {suspect, texte} : soupcon du tour en cours
-debat = []     # accusations finales, dans l'ordre
-roles = {}     # id -> rôle (caché jusqu'à la fin de la partie)
-journal = []   # derniers événements
+temps = {}
+votes = {}
+pensees = {}
+debat = []
+roles = {}
+journal = []
 fini = False
 dernier_role = 0
 
@@ -37,9 +37,8 @@ def on_message(c, u, msg):
         return
     with lock:
         if p[1] == "role":
-            if msg.retain:   # rôle d'une ancienne partie resté sur le broker
+            if msg.retain:
                 return
-            # nouvelle rafale = nouvelle partie
             if time.time() - dernier_role > 5:
                 reset()
             dernier_role = time.time()
@@ -68,7 +67,6 @@ def on_message(c, u, msg):
                 fini = True
 
 def soupcons():
-    # écart moyen à la médiane du tour + instabilité des valeurs du capteur
     s = {}
     n = max((len(v) for v in temps.values()), default=0)
     for i, v in temps.items():
@@ -97,9 +95,9 @@ def state():
 
 @app.get("/")
 def index():
-    return PAGE
+    return Page
 
-PAGE = r"""<!doctype html>
+Page = r"""<!doctype html>
 <html lang="fr"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Salle de contrôle</title>
@@ -161,72 +159,65 @@ function pos(i,n){const a=-Math.PI/2+i*2*Math.PI/Math.max(n,1);return[200+130*Ma
 function teinte(r){return r>.66?"#ff4d5e":r>.33?"#ffc857":"#3dffa0"}
 
 function rendu(s){
-  const n=s.ids.length, max=Math.max(...Object.values(s.soupcons),0.01), nv=Object.keys(s.votes).length;
-  const dbt=s.debat.length;
+  const n=s.ids.length, max=Math.max(...Object.values(s.soupcons),0.01), nbVotes=Object.keys(s.votes).length;
+  const nbAccus=s.debat.length;
   const tours=Math.max(0,...Object.values(s.temps).map(v=>v.length));
-  $("phase").textContent=!n?"en attente des capteurs…":s.fini?"partie termin\u00e9e":nv?`vote en cours (${nv}/${s.attendus||n})`:dbt?`accusations (${dbt}/${s.attendus||n})`:tours>=5&&Object.keys(s.pensees).length?"les capteurs r\u00e9fl\u00e9chissent\u2026":`mesures \u2014 tour ${tours}`;
+  $("phase").textContent=!n?"en attente des capteurs…":s.fini?"partie terminée":nbVotes?`vote en cours (${nbVotes}/${s.attendus||n})`:nbAccus?`accusations (${nbAccus}/${s.attendus||n})`:tours>=5&&Object.keys(s.pensees).length?"les capteurs réfléchissent…":`mesures — tour ${tours}`;
 
-  // radar
-  const N=$("noeuds"),F=$("fleches");N.replaceChildren();F.replaceChildren();
-  const P={};s.ids.forEach((id,i)=>P[id]=pos(i,n));
+  const noeuds=$("noeuds"),fleches=$("fleches");noeuds.replaceChildren();fleches.replaceChildren();
+  const positions={};s.ids.forEach((id,i)=>positions[id]=pos(i,n));
   for(const [v,c] of Object.entries(s.votes)){
-    if(!P[v]||!P[c])continue;
-    const [x1,y1]=P[v],[x2,y2]=P[c],d=Math.hypot(x2-x1,y2-y1)||1,k=30/d;
-    F.append(el("line",{x1:x1+(x2-x1)*k,y1:y1+(y2-y1)*k,x2:x2-(x2-x1)*k,y2:y2-(y2-y1)*k,stroke:"#ffc857","stroke-width":2,"stroke-dasharray":"5 4","marker-end":"url(#fl)"}));
+    if(!positions[v]||!positions[c])continue;
+    const [x1,y1]=positions[v],[x2,y2]=positions[c],d=Math.hypot(x2-x1,y2-y1)||1,k=30/d;
+    fleches.append(el("line",{x1:x1+(x2-x1)*k,y1:y1+(y2-y1)*k,x2:x2-(x2-x1)*k,y2:y2-(y2-y1)*k,stroke:"#ffc857","stroke-width":2,"stroke-dasharray":"5 4","marker-end":"url(#fl)"}));
   }
-  // tant que personne n'a vote : traits fins = soupcons du moment
-  if(!nv)for(const d of (dbt?s.debat:Object.values(s.pensees))){
-    if(!P[d.id]||!P[d.suspect])continue;
-    const [x1,y1]=P[d.id],[x2,y2]=P[d.suspect],dd=Math.hypot(x2-x1,y2-y1)||1,k=30/dd;
-    F.append(el("line",{x1:x1+(x2-x1)*k,y1:y1+(y2-y1)*k,x2:x2-(x2-x1)*k,y2:y2-(y2-y1)*k,stroke:"#ff4d5e","stroke-width":dbt?2:1,"stroke-dasharray":"2 5",opacity:.8}));
+  if(!nbVotes)for(const d of (nbAccus?s.debat:Object.values(s.pensees))){
+    if(!positions[d.id]||!positions[d.suspect])continue;
+    const [x1,y1]=positions[d.id],[x2,y2]=positions[d.suspect],dd=Math.hypot(x2-x1,y2-y1)||1,k=30/dd;
+    fleches.append(el("line",{x1:x1+(x2-x1)*k,y1:y1+(y2-y1)*k,x2:x2-(x2-x1)*k,y2:y2-(y2-y1)*k,stroke:"#ff4d5e","stroke-width":nbAccus?2:1,"stroke-dasharray":"2 5",opacity:.8}));
   }
   s.ids.forEach((id,i)=>{
-    const [x,y]=P[id],t=s.temps[id]||[],r=(s.soupcons[id]||0)/max,esp=s.fini&&id===s.ultron;
-    const c=esp?"#ff4d5e":s.fini?"#3dffa0":teinte(tours>1?r:0);
-    if(esp)N.append(el("circle",{cx:x,cy:y,r:34,fill:"none",stroke:"#ff4d5e","stroke-width":3,class:"pulse"}));
-    N.append(el("circle",{cx:x,cy:y,r:24,fill:"#06110d",stroke:c,"stroke-width":3}));
-    N.append(el("text",{x,y:y+5,"text-anchor":"middle",fill:c,"font-size":13},t.length?t[t.length-1].toFixed(1)+"°":"—"));
-    N.append(el("text",{x,y:y+(y<200?-32:44),"text-anchor":"middle",fill:COUL[i%6],"font-size":13},esp?id+" — ULTRON":id));
+    const [x,y]=positions[id],t=s.temps[id]||[],r=(s.soupcons[id]||0)/max,estUltron=s.fini&&id===s.ultron;
+    const c=estUltron?"#ff4d5e":s.fini?"#3dffa0":teinte(tours>1?r:0);
+    if(estUltron)noeuds.append(el("circle",{cx:x,cy:y,r:34,fill:"none",stroke:"#ff4d5e","stroke-width":3,class:"pulse"}));
+    noeuds.append(el("circle",{cx:x,cy:y,r:24,fill:"#06110d",stroke:c,"stroke-width":3}));
+    noeuds.append(el("text",{x,y:y+5,"text-anchor":"middle",fill:c,"font-size":13},t.length?t[t.length-1].toFixed(1)+"°":"—"));
+    noeuds.append(el("text",{x,y:y+(y<200?-32:44),"text-anchor":"middle",fill:COUL[i%6],"font-size":13},estUltron?id+" — ULTRON":id));
   });
 
-  // courbes
-  const C=$("courbes");C.replaceChildren();
+  const courbes=$("courbes");courbes.replaceChildren();
   const all=Object.values(s.temps).flat();
   if(all.length){
     let lo=Math.min(...all),hi=Math.max(...all);if(hi-lo<1){lo-=.5;hi+=.5}
     const X=k=>40+k*(340/Math.max(tours-1,1)),Y=v=>150-(v-lo)/(hi-lo)*130;
-    [lo,(lo+hi)/2,hi].forEach(v=>{C.append(el("line",{x1:40,x2:385,y1:Y(v),y2:Y(v),stroke:"#1d4a36"}));C.append(el("text",{x:34,y:Y(v)+4,"text-anchor":"end",fill:"#5c8f76","font-size":10},v.toFixed(1)))});
+    [lo,(lo+hi)/2,hi].forEach(v=>{courbes.append(el("line",{x1:40,x2:385,y1:Y(v),y2:Y(v),stroke:"#1d4a36"}));courbes.append(el("text",{x:34,y:Y(v)+4,"text-anchor":"end",fill:"#5c8f76","font-size":10},v.toFixed(1)))});
     s.ids.forEach((id,i)=>{const t=s.temps[id]||[];if(!t.length)return;
-      C.append(el("polyline",{points:t.map((v,k)=>X(k)+","+Y(v)).join(" "),fill:"none",stroke:COUL[i%6],"stroke-width":2}));
-      t.forEach((v,k)=>C.append(el("circle",{cx:X(k),cy:Y(v),r:3,fill:COUL[i%6]})))});
+      courbes.append(el("polyline",{points:t.map((v,k)=>X(k)+","+Y(v)).join(" "),fill:"none",stroke:COUL[i%6],"stroke-width":2}));
+      t.forEach((v,k)=>courbes.append(el("circle",{cx:X(k),cy:Y(v),r:3,fill:COUL[i%6]})))});
   }
 
-  // bulles : soupcons du tour, puis accusations finales
-  const U=$("bulles");U.replaceChildren();
-  $("titrebulles").textContent=dbt?"ACCUSATIONS":"CE QUE PENSENT LES CAPTEURS";
-  const liste=dbt?s.debat:s.ids.map(id=>s.pensees[id]).filter(Boolean);
-  if(!liste.length){const v=document.createElement("div");v.className="vide";v.textContent="en attente du premier tour\u2026";U.append(v)}
+  const bulles=$("bulles");bulles.replaceChildren();
+  $("titrebulles").textContent=nbAccus?"ACCUSATIONS":"CE QUE PENSENT LES CAPTEURS";
+  const liste=nbAccus?s.debat:s.ids.map(id=>s.pensees[id]).filter(Boolean);
+  if(!liste.length){const v=document.createElement("div");v.className="vide";v.textContent="en attente du premier tour…";bulles.append(v)}
   liste.forEach(d=>{const b=document.createElement("div"),h=document.createElement("b"),c=COUL[s.ids.indexOf(d.id)%6];
-    b.className=dbt?"bulle acc":"bulle";b.style.borderColor=c;h.style.color=c;
-    h.textContent=dbt?`${d.id} accuse ${d.suspect}`+(s.fini&&d.id===s.ultron?"  (c'\u00e9tait Ultron, il mentait)":""):d.id;
-    b.append(h,d.texte);U.append(b)});
+    b.className=nbAccus?"bulle acc":"bulle";b.style.borderColor=c;h.style.color=c;
+    h.textContent=nbAccus?`${d.id} accuse ${d.suspect}`+(s.fini&&d.id===s.ultron?"  (c'était Ultron, il mentait)":""):d.id;
+    b.append(h,d.texte);bulles.append(b)});
 
-  // barres de soupçon
-  const B=$("barres");B.replaceChildren();
+  const barres=$("barres");barres.replaceChildren();
   s.ids.forEach((id,i)=>{const v=s.soupcons[id]||0,row=document.createElement("div");row.className="bar";
     const a=document.createElement("b");a.textContent=id;a.style.color=COUL[i%6];
     const w=document.createElement("div"),f=document.createElement("i");f.style.width=(v/max*100)+"%";f.style.background=teinte(v/max);w.append(f);
-    const z=document.createElement("span");z.textContent=v.toFixed(2);row.append(a,w,z);B.append(row)});
+    const z=document.createElement("span");z.textContent=v.toFixed(2);row.append(a,w,z);barres.append(row)});
 
-  // journal
-  const J=$("journal");J.replaceChildren();
-  s.journal.slice().reverse().forEach(e=>{const d=document.createElement("div"),h=document.createElement("span");h.textContent=e.t;d.append(h,e.txt);J.append(d)});
+  const journal=$("journal");journal.replaceChildren();
+  s.journal.slice().reverse().forEach(e=>{const d=document.createElement("div"),h=document.createElement("span");h.textContent=e.t;d.append(h,e.txt);journal.append(d)});
 
-  // verdict
-  const V=$("verdict");
-  if(s.fini){V.style.display="block";V.style.color=s.gagne?"#3dffa0":"#ff4d5e";
-    V.textContent=s.gagne?`ULTRON DÉMASQUÉ : ${s.ultron} — LES CAPTEURS GAGNENT`:`ULTRON ${s.ultron} A GAGNÉ (désigné : ${s.designe})`}
-  else V.style.display="none";
+  const verdict=$("verdict");
+  if(s.fini){verdict.style.display="block";verdict.style.color=s.gagne?"#3dffa0":"#ff4d5e";
+    verdict.textContent=s.gagne?`ULTRON DÉMASQUÉ : ${s.ultron} — LES CAPTEURS GAGNENT`:`ULTRON ${s.ultron} A GAGNÉ (désigné : ${s.designe})`}
+  else verdict.style.display="none";
 }
 async function tick(){try{rendu(await (await fetch("/state")).json())}catch(e){$("phase").textContent="serveur injoignable"}}
 tick();setInterval(tick,1000);
@@ -235,7 +226,7 @@ tick();setInterval(tick,1000);
 if __name__ == "__main__":
     client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id="dashboard")
     client.on_connect, client.on_message = on_connect, on_message
-    client.connect(BROKER, 1883)
+    client.connect(Brok, 1883)
     client.loop_start()
-    print(f"dashboard sur http://0.0.0.0:{PORT}")
-    app.run(host="0.0.0.0", port=PORT, threaded=True)
+    print(f"dashboard sur http://0.0.0.0:{Port}")
+    app.run(host="0.0.0.0", port=Port, threaded=True)

@@ -31,6 +31,7 @@ Nb_tours = 5
 role = None
 hist = {}
 score = {}
+debats = {}
 mes_publiees = []
 
 def get_temp():
@@ -48,6 +49,7 @@ def _get_temp():
 def on_connect(c, u, flags, rc, props=None):
     c.subscribe(f"iot/role/{Id}")
     c.subscribe("iot/capteurs/+/temperature")
+    c.subscribe("iot/debat/+")
 
 def on_message(c, u, msg):
     global role
@@ -58,14 +60,21 @@ def on_message(c, u, msg):
         print("rôle :", role)
         return
     sid = msg.topic.split("/")[2]
+    if msg.topic.startswith("iot/debat/"):
+        if sid != Id and sid not in debats:
+            try:
+                debats[sid] = str(json.loads(msg.payload)["texte"])
+            except (ValueError, KeyError, TypeError):
+                pass
+        return
     if sid != Id:
         hist.setdefault(sid, []).append(float(msg.payload))
         print(f"{sid} envoie {float(msg.payload)}")
 
-def ask_agent(cible=None):
+def ask_agent(debat=None):
     mesures = {**hist, Id: mes_publiees}
     r = requests.post(f"{Url_agent}/detect", timeout=300,
-        json={"me": Id, "mesures": mesures, "role": role, "cible": cible})
+        json={"me": Id, "mesures": mesures, "role": role, "debat": debat or {}})
     r.raise_for_status()
     d = r.json()
     return d["suspect"], d.get("raison", "")
@@ -112,13 +121,26 @@ if score:
     algo = max(score, key=score.get)
     print("l'agent réfléchit...")
     try:
-        suspect, texte = ask_agent(cible=algo if role == "ultron" else None)
+        suspect, texte = ask_agent()
         print(f"algo -> {algo} | agent -> {suspect}")
     except (requests.RequestException, KeyError, ValueError) as e:
         print("agent KO, je garde l'algo :", e)
         suspect = algo
         texte = f"J'accuse {algo} : c'est lui qui s'écarte le plus de la médiane (écart cumulé {score[algo]:.1f} °C)."
     dire("debat", suspect, texte)
+
+    print("j'écoute les accusations des autres...")
+    fin = time.time() + 120
+    while len(debats) < len(hist) and time.time() < fin:
+        time.sleep(0.5)
+    if debats:
+        try:
+            vote, texte = ask_agent(debat=debats)
+            print(f"avant débat -> {suspect} | après débat -> {vote}")
+            suspect = vote
+            dire("debat", suspect, texte)
+        except (requests.RequestException, KeyError, ValueError) as e:
+            print("agent KO pour le vote, je garde mon accusation :", e)
     time.sleep(3)
     client.publish(f"iot/votes/{Id}", suspect, qos=1)
     print("vote :", suspect)
